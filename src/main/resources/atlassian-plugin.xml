@@ -4,4 +4,12 @@
         <version>${project.version}</version>
         <vendor name="${project.organization.name}" url="${project.organization.url}" />
     </plugin-info>
+    
+<jql-function key="version-structe" name="Version Structure Function" class="de.dfs.jiraplugins.MyPlugin">
+  <!--The name of the function-->
+  <fname>versionStructure</fname>
+  <description>Provides a JQL function to restrict the search to issues in the structure of a version.</description>
+  <!--Whether this function returns a list or a single value-->
+  <list>true</list>
+</jql-function>
 </atlassian-plugin>
