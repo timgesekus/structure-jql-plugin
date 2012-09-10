@@ -12,4 +12,5 @@
   <!--Whether this function returns a list or a single value-->
   <list>true</list>
 </jql-function>
+<component-import key="structure-services" interface="com.almworks.jira.structure.api.StructureServices"/>
 </atlassian-plugin>

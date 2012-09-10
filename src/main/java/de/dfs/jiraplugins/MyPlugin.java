@@ -2,12 +2,20 @@ package de.dfs.jiraplugins;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.almworks.integers.LongArray;
 import com.almworks.jira.structure.api.PermissionLevel;
 import com.almworks.jira.structure.api.Structure;
+import com.almworks.jira.structure.api.StructureException;
 import com.almworks.jira.structure.api.StructureManager;
 import com.almworks.jira.structure.api.StructureServices;
+import com.almworks.jira.structure.api.forest.Forest;
 import com.atlassian.crowd.embedded.api.User;
 import com.atlassian.jira.JiraDataType;
 import com.atlassian.jira.JiraDataTypes;
@@ -32,6 +40,8 @@ public class MyPlugin extends AbstractJqlFunction {
 	private JqlFunctionModuleDescriptor descriptor;
 	private StructureManager structureManager;
 
+	 private static final Logger log = LoggerFactory.getLogger(MyPlugin.class);
+	 
 	public MyPlugin(VersionManager versionManager, IssueManager issueManager,
 			StructureServices structureServices) {
 		this.versionManager = versionManager;
@@ -67,29 +77,82 @@ public class MyPlugin extends AbstractJqlFunction {
 	@Override
 	public List<QueryLiteral> getValues(QueryCreationContext context,
 			FunctionOperand functionOperand, TerminalClause arg2) {
-		List<Structure> structures = structureManager.getStructuresByName(null, context.getUser(), PermissionLevel.VIEW, false);
+		
+		Set<Long> versionIds = getIssuesForVersions(functionOperand);
+		List<Long> structureIssueIds = getStructureChildrenIssues(context,
+				versionIds);
+		versionIds.addAll(structureIssueIds);
+		final List<QueryLiteral> literals = createQueryLiteralsFromIssues(
+				functionOperand, versionIds);
+		return literals;
+	}
+
+	private List<QueryLiteral> createQueryLiteralsFromIssues(
+			FunctionOperand functionOperand, Set<Long> versionIds) {
 		final List<QueryLiteral> literals = new ArrayList<QueryLiteral>();
-		Collection<Version> versions = getVersions(functionOperand);
-		for (Version version : versions) {
-			Collection<Issue> issues = versionManager
-					.getIssuesWithFixVersion(version);
-			for (Issue issue : issues) {
-				literals.add(new QueryLiteral(functionOperand, issue.getId()));
-			}
+		for(Long IssueId: versionIds) {
+			literals.add(new QueryLiteral(functionOperand, IssueId));
+					
 		}
 		return literals;
 	}
 
-	private List<Long> getStructureChildren(Long issueId, Structure structure) {
-		List<Long> children = new ArrayList<Long>();
-		//Forest forest = structure.getForest(arg0, arg1)
-		return children;
+	private List<Long> getStructureChildrenIssues(QueryCreationContext context,
+			Set<Long> versionIds) {
+		List<Structure> structures = structureManager.getStructuresByName("Global Structure", context.getUser(), PermissionLevel.VIEW, false);
+		List<Long> structureIssueIds = new ArrayList<Long>();
+		try {
+			structureIssueIds = getStructureChildren(structures, new ArrayList<Long> (versionIds), context.getUser());
+		} catch (StructureException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		return structureIssueIds;
 	}
-	private Collection<Version> getVersions(FunctionOperand functionOperand) {
+
+	private Set<Long> getIssuesForVersions(FunctionOperand functionOperand) {
+		List<Version> versions = getVersions(functionOperand);
+		Set<Long> versionIds = getIssuesInVersions(versions);
+		return versionIds;
+	}
+
+	private Set<Long> getIssuesInVersions(List<Version> versions) {
+		Set<Long> versionIds = new HashSet<Long>();
+		for (Version version : versions) {
+			Collection<Issue> issues = versionManager
+					.getIssuesWithFixVersion(version);
+			for (Issue issue : issues) {
+				versionIds.add(issue.getId());
+			}
+		}
+		return versionIds;
+	}
+
+	private List<Long> getStructureChildren(List<Structure> structures, List<Long> issueIds, User user) throws StructureException {
+		log.error("Entering getStructureChildren ");
+		
+		Set<Long> issues = new HashSet<Long>();
+		for (Structure structure: structures) {
+			log.error("Entering Structure " + structure.getName());
+			Forest forest = structure.getForest(user, false);
+			for (Long issueId: issueIds) {
+				List<Long> childrenIssues = getIssueChildrenInForest(issueId,forest);
+				issues.addAll(childrenIssues);
+			}
+		}
+		return new ArrayList<Long>(issues);
+	}
+	
+	private List<Long> getIssueChildrenInForest(Long issueId, Forest forest) {
+		Forest subtree = forest.copySubtree(issueId);
+		return subtree.getIssues().toList();
+	}
+
+	private List<Version> getVersions(FunctionOperand functionOperand) {
 		List<String> args = functionOperand.getArgs();
 		Collection<Version> versions = versionManager.getVersionsByName(args
 				.get(0));
-		return versions;
+		return new ArrayList<Version>(versions);
 	}
 
 	@Override
